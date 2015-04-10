@@ -1,6 +1,11 @@
 require 'socket'
 require 'yaml'
 
+# Git commands to update project on Github
+# git stage (name of file you updated)
+# git commit -m 'What you changed'
+# git push origin master
+
 class Packet
 
 	attr_accessor:msg_type,:seq_num,:source,:dest,:adj_hash,:data
@@ -22,7 +27,11 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs
+	attr_accessor:name,:ip_addrs,:adj_hash
+
+	def initialize(name){
+		
+	}
 
 end
 
