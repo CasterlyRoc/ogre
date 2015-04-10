@@ -1,14 +1,32 @@
 require 'socket'
+require 'yaml'
 
 class Packet
 
-	attr_accessor :name,:number
+	attr_accessor:msg_type,:seq_num,:source,:dest,:adj_hash,:data
 
-	def initialize(name, number)
-		@name = name
-		@number = number
+	def initialize(type, source, dest, data)
+		@msg_type = type
+		@seq_num = 1
+		@source = source
+		@dest = dest
+		@adj_hash = Hash.new
+		@data = data
+	end
+
+	def to_s
+		"#{msg_type}, #{seq_num}, #{source}, #{dest}, #{data}"
 	end
 
 end
 
-puts "Hello Worldß"
+class Node
+
+	attr_accessor:name,:ip_addrs
+
+end
+
+# Execute hostname to get name
+# Look up node's IP address with name
+# Find neighbors and cost
+
