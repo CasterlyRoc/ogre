@@ -1,10 +1,6 @@
 fHandle_ns = File.open(ARGV[0], 'r')
 interval = ARGV[2].to_i
 
-def Helloword 
-  puts "Hello World!"
-end
-
 ns = {}
 
 while(line = fHandle_ns.gets())
