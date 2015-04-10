@@ -1,7 +1,6 @@
 fHandle_ns = File.open(ARGV[0], 'r')
 interval = ARGV[2].to_i
 
-
 ns = {}
 
 while(line = fHandle_ns.gets())
