@@ -10,3 +10,5 @@ class Packet
 	end
 
 end
+
+puts "Hello Worldß"
