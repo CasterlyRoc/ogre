@@ -27,7 +27,11 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs
+	attr_accessor:name,:ip_addrs,:adj_hash
+
+	def initialize(name){
+		
+	}
 
 end
 
