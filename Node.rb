@@ -1,6 +1,11 @@
 require 'socket'
 require 'yaml'
 
+# Git commands to update project on Github
+# git stage (name of file you updated)
+# git commit -m 'What you changed'
+# git push origin master
+
 class Packet
 
 	attr_accessor:msg_type,:seq_num,:source,:dest,:adj_hash,:data
