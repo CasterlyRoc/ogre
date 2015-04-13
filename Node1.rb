@@ -95,71 +95,22 @@ while link_line = link_file.gets
 	end
 end
 
-# # Recieving Thread
-# threads << Thread.new do
-# 	srv_sock = TCPServer.open(9999)
-# 	data = ""
-# 	recv_length = 255
-# 	client = srv_sock.accept
-# 	while(tmp = client.recv(recv_length))
-# 		data += tmp
-# 		break if tmp.length < recv_length
-# 	end
-
-# 	packet = YAML::load(data)
-
-# 	puts packet.to_s
-# end
-
-# Sending Thread
+# Recieving Thread
 threads << Thread.new do
-	node.adj_hash.each_key{ |neighbor|
-		out_packet = Packet.new("LINK_PACKET", node.name, neighbor, "THIS IS A TEST")
-		serialized_obj = YAML::dump(out_packet)
-		sockfd = TCPSocket.open(neighbor, 9999)
-		sockfd.send(serialized_obj, 0)
-		s.close
-	}
+	srv_sock = TCPServer.open(9999)
+	data = ""
+	recv_length = 255
+	client = srv_sock.accept
+	while(tmp = client.recv(recv_length))
+		data += tmp
+		break if tmp.length < recv_length
+	end
+
+	packet = YAML::load(data)
+
+	puts packet.to_s
 end
 
 threads.each{ |t|
 	t.join
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
