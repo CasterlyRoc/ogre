@@ -27,12 +27,13 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs,:adj_hash
+	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash
 
 	def initialize(name)
 		@name = name
 		@ip_addrs = Array.new
 		@adj_hash = Hash.new
+		@seq_hash = Hash.new
 	end
 
 	def add_ip_addr(ip)
@@ -54,7 +55,12 @@ class Node
 			puts "  has an edge to #{k} with cost #{v}"
 		}
 	end
+
 end
+
+# Variables
+threads = Array.new
+srv_sock = TCPServer.open(9999)
 
 # Execute hostname to get name of the node
 name_of_node = `hostname`
@@ -89,7 +95,23 @@ while link_line = link_file.gets
 	end
 end
 
-node.to_s
+# Recieving Thread
+threads << Thread.new do
+	data = ""
+	recv_length = 255
+	client = srv.accept
+	while(tmp = client.recv(recv_length))
+		data += tmp
+		break if tmp.length < recv_length
+	end
+
+	packet = YAML::load(data)
+
+end
+
+
+
+
 
 
 
