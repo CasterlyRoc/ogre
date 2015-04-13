@@ -1,4 +1,5 @@
 require 'socket'
+require 'thread'
 require 'yaml'
 
 # Git commands to update project on Github
