@@ -60,11 +60,10 @@ end
 
 # Variables
 threads = Array.new
-srv_sock = TCPServer.open(9999)
 
 # Execute hostname to get name of the node
 name_of_node = `hostname`
-node = Node.new("n1")
+node = Node.new(name_of_node)
 
 # Process config file
 
@@ -97,6 +96,7 @@ end
 
 # Recieving Thread
 threads << Thread.new do
+	srv_sock = TCPServer.open(9999)
 	data = ""
 	recv_length = 255
 	client = srv.accept
@@ -107,7 +107,23 @@ threads << Thread.new do
 
 	packet = YAML::load(data)
 
+	puts packet.to_s
 end
+
+# Sending Thread
+threads << Thread.new do
+	node.ip_addrs.each{ |neighbor|
+		out_packet = Packet.new("LINK_PACKET", node.name, neighbor, "THIS IS A TEST")
+		serialized_obj = YAML::dump(out_packet)
+		sockfd = TCPSocket.open(neighbor, 9999)
+		sockfd.send(serialized_obj, 0)
+		s.close
+	}
+end
+
+threads.each{ |t|
+	t.join
+}
 
 
 
