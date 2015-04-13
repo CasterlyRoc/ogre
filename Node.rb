@@ -95,21 +95,21 @@ while link_line = link_file.gets
 	end
 end
 
-# # Recieving Thread
-# threads << Thread.new do
-# 	srv_sock = TCPServer.open(9999)
-# 	data = ""
-# 	recv_length = 255
-# 	client = srv_sock.accept
-# 	while(tmp = client.recv(recv_length))
-# 		data += tmp
-# 		break if tmp.length < recv_length
-# 	end
+# Recieving Thread
+threads << Thread.new do
+	srv_sock = TCPServer.open(9999)
+	data = ""
+	recv_length = 255
+	client = srv_sock.accept
+	while(tmp = client.recv(recv_length))
+		data += tmp
+		break if tmp.length < recv_length
+	end
 
-# 	packet = YAML::load(data)
+	packet = YAML::load(data)
 
-# 	puts packet.to_s
-# end
+	puts packet.to_s
+end
 
 # Sending Thread
 threads << Thread.new do
