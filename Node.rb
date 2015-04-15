@@ -7,16 +7,19 @@ require 'yaml'
 # git commit -m 'What you changed'
 # git push origin master
 
+# gen weights file input
+# when to run dijkstras, wait for whole topo or whenever we recieve packet
+
 class Packet
 
-	attr_accessor:msg_type,:seq_num,:source,:dest,:adj_hash,:data
+	attr_accessor:msg_type,:seq_num,:source,:dest,:topo_hash,:data
 
-	def initialize(type, source, dest, data, adj_hash)
+	def initialize(type, source, dest, topo_hash, data)
 		@msg_type = type
 		@seq_num = 1
 		@source = source
 		@dest = dest
-		@adj_hash = adj_hash
+		@topo_hash = topo_hash
 		@data = data
 	end
 
@@ -36,6 +39,7 @@ class Node
 		@adj_hash = Hash.new
 		@seq_hash = Hash.new
 		@routing_table = Hash.new
+		@topo_hash = Hash.new
 	end
 
 	def add_ip_addr(ip)
@@ -44,6 +48,16 @@ class Node
 
 	def add_neighbor(dest_node, cost)
 		adj_hash.store(dest_node, cost)
+	end
+
+	def add_topo(source, dest_node, cost)
+		if(@topo_hash[source] == nil)
+			tmp = Hash.new
+			tmp[dest_node] = cost
+			@topo_hash[source] = tmp
+		else
+			@topo_hash[source][dest_node] = cost
+		end
 	end
 
 	def to_s
@@ -56,8 +70,27 @@ class Node
 		adj_hash.each{ |k,v|
 			puts "  has an edge to #{k} with cost #{v}"
 		}
+		puts "---Topo Hash---"
+		@topo_hash.each_key{ |source|
+			puts "#{source}"
+			@topo_hash[source].each{ |dest, cost|
+				puts " #{dest} #{cost}"
+			}
+		}
 	end
 
+end
+
+# Gets the name of the node given an IP address
+def get_name(ip_addr, file)
+	nodes_to_addr_file = open(file)
+	while nodes_to_addr_line = nodes_to_addr_file.gets
+		name_of_node, ip_addr_file = nodes_to_addr_line.split(" ")
+		ip_addr_file.chomp!
+		if(ip_addr == ip_addr_file)
+			return name_of_node
+		end
+	end
 end
 
 # Variables
@@ -94,8 +127,12 @@ while link_line = link_file.gets
 	if(node.ip_addrs.include?(source_node))
 		c = cost.to_i
 		node.add_neighbor(dest_node, c)
+		n = get_name(dest_node, node_line)
+		node.add_topo(node.name,n, c)
 	end
 end
+
+node.to_s
 
 # Recieving Thread
 threads << Thread.new do
@@ -111,19 +148,29 @@ threads << Thread.new do
 	packet = YAML::load(data)
 
 	if(packet.msg_type == "LINK_PACKET")
-		puts packet.to_s
+		if(node.seq_hash[packet.source] != packet.seq_num)
+			node.seq_hash[packet.source] = packet.seq_num
+			packet.topo_hash.each_key{ |source|
+				puts "Source: #{source}"
+				packet.topo_hash[source].each{ |dest, cost|
+					puts " Dest: #{dest} Cost: #{cost}"
+					node.add_topo(source,dest,cost)
+				}
+			}
+			node.to_s
+		end
 	end
 end
 
 # Routing Thread
 threads << Thread.new do
-	sleep(10)
+	sleep(5)
 	node.adj_hash.each_key{ |neighbor|
-		out_packet = Packet.new("LINK_PACKET", node.name, neighbor, "THIS IS A TEST")
+		out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
 		serialized_obj = YAML::dump(out_packet)
 		sockfd = TCPSocket.open(neighbor, 9999)
 		sockfd.send(serialized_obj, 0)
-		s.close
+		sockfd.close
 	}
 end
 
