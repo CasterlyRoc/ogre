@@ -11,12 +11,12 @@ class Packet
 
 	attr_accessor:msg_type,:seq_num,:source,:dest,:adj_hash,:data
 
-	def initialize(type, source, dest, data)
+	def initialize(type, source, dest, data, adj_hash)
 		@msg_type = type
 		@seq_num = 1
 		@source = source
 		@dest = dest
-		@adj_hash = Hash.new
+		@adj_hash = adj_hash
 		@data = data
 	end
 
@@ -28,13 +28,14 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash
+	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash
 
 	def initialize(name)
 		@name = name
 		@ip_addrs = Array.new
 		@adj_hash = Hash.new
 		@seq_hash = Hash.new
+		@routing_table = Hash.new
 	end
 
 	def add_ip_addr(ip)
@@ -64,6 +65,7 @@ threads = Array.new
 
 # Execute hostname to get name of the node
 name_of_node = `hostname`
+name_of_node.chomp!
 node = Node.new(name_of_node)
 
 # Process config file
@@ -108,11 +110,14 @@ threads << Thread.new do
 
 	packet = YAML::load(data)
 
-	puts packet.to_s
+	if(packet.msg_type == "LINK_PACKET")
+		puts packet.to_s
+	end
 end
 
-# Sending Thread
+# Routing Thread
 threads << Thread.new do
+	sleep(10)
 	node.adj_hash.each_key{ |neighbor|
 		out_packet = Packet.new("LINK_PACKET", node.name, neighbor, "THIS IS A TEST")
 		serialized_obj = YAML::dump(out_packet)
