@@ -1,7 +1,6 @@
 require 'socket'
 require 'thread'
 require 'yaml'
-require "./dijkstra.rb"
 
 # Git commands to update project on Github
 # git stage (name of file you updated)
@@ -94,8 +93,75 @@ def get_name(ip_addr, file)
 	end
 end
 
+
+def dijkstra (graph, src)
+	dist = {}
+	prev = {}
+	visit = []
+	route = {}
+
+	graph.each_key{ |k| 
+		dist[k] =  10000
+		prev[k] = nil
+		visit.push(k)
+	}
+
+	dist[src] = 0
+
+	while !visit.empty? 
+		u = minDist(visit,dist)
+		visit.delete(u)
+		graph[u].each { |k,v|
+	
+			alt = dist[u] + v
+			if alt < dist[k] then
+				dist[k] = alt
+				prev[k] = u
+	 		end
+	 	}
+	end
+
+	
+	graph.each_key{|k|
+		check = k
+		neighbor = false
+		if k == src then
+			route[k] = nil
+		elsif prev[k] == src then
+			route[k] = k
+		else
+			while neighbor == false do
+				graph[src].each_key{ |neigh|
+					if prev[check] == neigh then
+						neighbor = true
+					end
+				}
+				check = prev[check]
+			end
+			route[k]=check
+		end
+	}
+
+	return route
+end
+
+def minDist (x,dist)
+
+	max_dist = 10000
+	node = nil
+	x.each { |k|
+		if dist[k] < max_dist then
+			max_dist = dist[k]
+			node = k
+		end
+	}
+
+	return node
+end
+
 # Variables
 threads = Array.new
+nodes = Array.new
 
 # Execute hostname to get name of the node
 name_of_node = `hostname`
@@ -117,6 +183,9 @@ link_file = open(link_line)
 # Get ip addresses assoc with the node
 while nodes_to_addr_line = nodes_to_addr_file.gets
 	name_of_node, ip_addr = nodes_to_addr_line.split(" ")
+	if(nodes.include?(name_of_node) == false)
+		nodes.push(name_of_node)
+	end
 	if(name_of_node == node.name)
 		node.add_ip_addr(ip_addr)
 	end
@@ -174,16 +243,34 @@ threads << Thread.new do
 	end
 end
 
+
 # Routing Thread
 threads << Thread.new do
-	sleep(5)
-	node.adj_hash.each_key{ |neighbor|
-		out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
-		serialized_obj = YAML::dump(out_packet)
-		sockfd = TCPSocket.open(neighbor, 9999)
-		sockfd.send(serialized_obj, 0)
-		sockfd.close
-	}
+	while(1)
+		sleep(5)
+		knows_topology = true
+		node.adj_hash.each_key{ |neighbor|
+			out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
+			serialized_obj = YAML::dump(out_packet)
+			sockfd = TCPSocket.open(neighbor, 9999)
+			sockfd.send(serialized_obj, 0)
+			sockfd.close
+		}
+		nodes.each{ |n|
+			topo_nodes = node.topo_hash.keys
+			if(topo_nodes.include?(n) == false)
+				knows_topology = false
+			end
+		}
+		if(knows_topology == true)
+			route = dijkstra(node.topo_hash, node.name)
+			if(route == nil)
+				puts "NIL"
+			else
+				puts route
+			end
+		end
+	end
 end
 
 threads.each{ |t|
