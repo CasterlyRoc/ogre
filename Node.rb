@@ -80,7 +80,35 @@ class Node
 		}
 	end
 
+	def topo_string
+		puts "TOPO HASH STRING"
+		s = "{"
+		i = 0
+		@topo_hash.each_key{ |k|
+			if (i != 0)
+				s += ","
+			end
+			s += "\"#{k}\"=>{"
+			j = 0
+			@topo_hash[k].each{ |dest, cost|
+				if (j != 0)
+					s += ","
+				end
+				s += "\"#{dest}\"=>#{cost}"
+				j += 1
+			 }
+			 s+="}"
+			 i += 1
+		}
+
+		s  += "}"
+		puts s
 end
+
+end
+
+	
+
 
 # Gets the name of the node given an IP address
 def get_name(ip_addr, file)
