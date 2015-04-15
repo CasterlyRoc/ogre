@@ -1,6 +1,7 @@
 require 'socket'
 require 'thread'
 require 'yaml'
+require "./dijkstra.rb"
 
 # Git commands to update project on Github
 # git stage (name of file you updated)
@@ -132,32 +133,43 @@ while link_line = link_file.gets
 	end
 end
 
-node.to_s
-
 # Recieving Thread
 threads << Thread.new do
 	srv_sock = TCPServer.open(9999)
-	data = ""
 	recv_length = 255
-	client = srv_sock.accept
-	while(tmp = client.recv(recv_length))
-		data += tmp
-		break if tmp.length < recv_length
-	end
+	while(1)
+		data = ""
+		client = srv_sock.accept
+		while(tmp = client.recv(recv_length))
+			data += tmp
+			break if tmp.length < recv_length
+		end
 
-	packet = YAML::load(data)
+		packet = YAML::load(data)
+		if(packet.msg_type == "LINK_PACKET")
+			if(node.seq_hash[packet.source] != packet.seq_num)
 
-	if(packet.msg_type == "LINK_PACKET")
-		if(node.seq_hash[packet.source] != packet.seq_num)
-			node.seq_hash[packet.source] = packet.seq_num
-			packet.topo_hash.each_key{ |source|
-				puts "Source: #{source}"
-				packet.topo_hash[source].each{ |dest, cost|
-					puts " Dest: #{dest} Cost: #{cost}"
-					node.add_topo(source,dest,cost)
+				# Updates the seq num for the source
+				node.seq_hash[packet.source] = packet.seq_num
+
+				# Updates nodes topo table with packets
+				packet.topo_hash.each_key{ |source|
+					packet.topo_hash[source].each{ |dest, cost|
+						node.add_topo(source,dest,cost)
+					}
 				}
-			}
-			node.to_s
+
+				# Send recieved packet out to neighbors
+				recv_serialized_obj = YAML::dump(packet)
+				node.adj_hash.each_key{ |neighbor|
+					name_of_neighbor = get_name(neighbor, node_line)
+					if(packet.source != name_of_neighbor)
+						recv_sockfd = TCPSocket.open(neighbor, 9999)
+						recv_sockfd.send(recv_serialized_obj, 0)
+						recv_sockfd.close
+					end
+				}
+			end
 		end
 	end
 end
