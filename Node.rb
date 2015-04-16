@@ -106,13 +106,17 @@ class Node
 
 	def file_has_changed(file)
 		has_changed = false
-		File.open(file){ |line|
+		f = open(file)
+		while line = f.gets
 			source, dest, cost = line.split(" \n")
 			if(@ip_addrs.include?(source) == true)
 				c = cost.to_i
-				
+				if(@adj_hash.fetch(dest) != c)
+					has_changed = true
+				end
 			end
-		}
+		end
+		f.close
 		return has_changed
 	end
 end
@@ -271,6 +275,9 @@ while link_line = link_file.gets
 	end
 end
 
+nodes_to_addr_file.close
+link_file.close
+
 
 # Recieving Thread
 threads << Thread.new do
@@ -314,17 +321,32 @@ threads << Thread.new do
 end
 
 stop_writing = false
+init = true
 
 # Routing Thread
 threads << Thread.new do
 	while(1)
 		flag = false
 		sleep(5)
-		if(weight file changed)
+		if(node.file_has_changed(link_file))
 			flag = true
+			puts "MADE IT"
 		end
-		if(flag == true)
-			# update the node from the file 
+		if(flag == true || init == true)
+			init = false
+			if(flag == true)
+				link_file = open(link_line)
+				while line = link_file.gets
+					source_node, dest_node, cost = line.split(" ")
+					if(node.ip_addrs.include?(source_node))
+						c = cost.to_i
+						node.add_neighbor(dest_node, c)
+						n = get_name(dest_node, node_line)
+						node.add_topo(node.name,n, c)
+					end
+				end
+				link_file.close
+			end 
 			node.adj_hash.each_key{ |neighbor|
 				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
 				serialized_obj = YAML::dump(out_packet)
