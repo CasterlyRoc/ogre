@@ -103,11 +103,21 @@ end
 def print_route(route)
 		s = "{"
 		i = 0
-		route.each{ |k,v|
+		route.each_key{ |k|
 			if (i != 0)
 				s += ","
 			end
-			s += "\"#{k}\"=>\"#{v}\""
+			s += "\"#{k}\"=>{"
+			j = 0
+			route[k].each{ |dest, cost|
+				if (j != 0)
+					s += ","
+				end
+				s += "\"#{dest}\"=>#{cost}"
+				j += 1
+			 }
+			 s+="}"
+			 i += 1
 		}
 
 		s  += "}"
@@ -278,6 +288,7 @@ threads << Thread.new do
 	end
 end
 
+stop_writing = false
 
 # Routing Thread
 threads << Thread.new do
@@ -297,13 +308,11 @@ threads << Thread.new do
 				knows_topology = false
 			end
 		}
-		if(knows_topology == true)
+		if(knows_topology == true && stop_writing == false)
+			stop_writing = true
 			route = dijkstra(node.topo_hash, node.name)
-			if(route == nil)
-				puts "NIL"
-			else
-				print_route(route)
-			end
+			file = File.open("routing_table.txt", "w")
+			file.puts "Source\tDest\tCost\tNextHop"
 		end
 	end
 end
