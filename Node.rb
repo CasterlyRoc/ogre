@@ -160,9 +160,9 @@ def dijkstra (graph, src)
 		check = k
 		neighbor = false
 		if k == src then
-			route[k] = nil
+			route[k] = { k => dist[k]}
 		elsif prev[k] == src then
-			route[k] = k
+			route[k] = { k => dist[k]}
 		else
 			while neighbor == false do
 				graph[src].each_key{ |neigh|
@@ -172,7 +172,7 @@ def dijkstra (graph, src)
 				}
 				check = prev[check]
 			end
-			route[k]=check
+			route[k]= {check => dist[k]}
 		end
 	}
 
