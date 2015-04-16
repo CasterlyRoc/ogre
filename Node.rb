@@ -71,25 +71,20 @@ class Node
 			puts "  has an edge to #{k} with cost #{v}"
 		}
 		puts "---Topo Hash---"
-		@topo_hash.each_key{ |source|
-			puts "#{source}"
-			@topo_hash[source].each{ |dest, cost|
-				puts " #{dest} #{cost}"
-			}
-		}
+		topo_string
 	end
 
-	def topo_string
+	def topo_string(route)
 		puts "TOPO HASH STRING"
 		s = "{"
 		i = 0
-		@topo_hash.each_key{ |k|
+		route.each_key{ |k|
 			if (i != 0)
 				s += ","
 			end
 			s += "\"#{k}\"=>{"
 			j = 0
-			@topo_hash[k].each{ |dest, cost|
+			route[k].each{ |dest, cost|
 				if (j != 0)
 					s += ","
 				end
@@ -102,11 +97,22 @@ class Node
 
 		s  += "}"
 		puts s
+	end
 end
 
-end
+def print_route(route)
+		s = "{"
+		i = 0
+		route.each{ |k,v|
+			if (i != 0)
+				s += ","
+			end
+			s += "\"#{k}\"=>\"#{v}\""
+		}
 
-	
+		s  += "}"
+		puts s
+end	
 
 
 # Gets the name of the node given an IP address
@@ -230,6 +236,7 @@ while link_line = link_file.gets
 	end
 end
 
+
 # Recieving Thread
 threads << Thread.new do
 	srv_sock = TCPServer.open(9999)
@@ -295,7 +302,7 @@ threads << Thread.new do
 			if(route == nil)
 				puts "NIL"
 			else
-				puts route
+				print_route(route)
 			end
 		end
 	end
