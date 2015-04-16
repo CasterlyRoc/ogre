@@ -10,6 +10,9 @@ require 'yaml'
 # gen weights file input
 # when to run dijkstras, wait for whole topo or whenever we recieve packet
 
+# Screen grab
+# Cant look up file
+
 class Packet
 
 	attr_accessor:msg_type,:seq_num,:source,:dest,:topo_hash,:data
@@ -121,7 +124,7 @@ def print_route(route)
 		}
 
 		s  += "}"
-		puts s
+		return s
 end	
 
 
@@ -288,13 +291,30 @@ threads << Thread.new do
 	end
 end
 
-stop_writing = false
+write_to_file = false
 
 # Routing Thread
 threads << Thread.new do
 	while(1)
+		sleep(15)
+		if(write_to_file == false)
+			write_to_file = true
+			str = ""
+			route = dijkstra(node.topo_hash, node.name)
+			f = File.open("routing_table#{node.name}.txt", "w")
+			str = ""
+			route.each_key{ |dest|
+				str += node.name + "," + dest + ","
+				route[dest].each{ |nextHop,cost|
+					str += cost.to_s + "," + nextHop + "\n"
+				}
+			}
+			f.write(str)
+			f.close()
+		end
+	end
+	while(1)
 		sleep(5)
-		knows_topology = true
 		node.adj_hash.each_key{ |neighbor|
 			out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
 			serialized_obj = YAML::dump(out_packet)
@@ -302,24 +322,9 @@ threads << Thread.new do
 			sockfd.send(serialized_obj, 0)
 			sockfd.close
 		}
-		nodes.each{ |n|
-			topo_nodes = node.topo_hash.keys
-			if(topo_nodes.include?(n) == false)
-				knows_topology = false
-			end
-		}
-		if(knows_topology == true && stop_writing == false)
-			stop_writing = true
-			route = dijkstra(node.topo_hash, node.name)
-			file = File.open("routing_table.txt", "w")
-			file.puts "Source\tDest\tCost\tNextHop"
-		end
 	end
 end
 
-threads.each{ |t|
-	t.join
-}
 
 
 
