@@ -1,6 +1,7 @@
 require 'socket'
 require 'thread'
 require 'yaml'
+require 'monitor'
 
 # Git commands to update project on Github
 # git stage (name of file you updated)
@@ -10,7 +11,7 @@ require 'yaml'
 # gen weights file input
 # when to run dijkstras, wait for whole topo or whenever we recieve packet
 
-# Screen grab
+# Screen gra
 # Cant look up file
 
 class Packet
@@ -34,7 +35,7 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash
+	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash,:lock
 
 	def initialize(name)
 		@name = name
@@ -43,6 +44,7 @@ class Node
 		@seq_hash = Hash.new
 		@routing_table = Hash.new
 		@topo_hash = Hash.new
+		@lock = Monitor.new
 	end
 
 	def add_ip_addr(ip)
@@ -100,6 +102,18 @@ class Node
 
 		s  += "}"
 		puts s
+	end
+
+	def file_has_changed(file)
+		has_changed = false
+		File.open(file){ |line|
+			source, dest, cost = line.split(" \n")
+			if(@ip_addrs.include?(source) == true)
+				c = cost.to_i
+				
+			end
+		}
+		return has_changed
 	end
 end
 
@@ -206,6 +220,7 @@ def minDist (x,dist)
 	return node
 end
 
+
 # Variables
 threads = Array.new
 nodes = Array.new
@@ -226,6 +241,13 @@ nodes_to_addr_file = open(node_line)
 link_line = config_file.gets
 link_line.chomp!
 link_file = open(link_line)
+
+routing_path_line = config_file.gets
+routing_path_line.chomp!
+
+dump_interval = config_file.gets
+dump_interval.chomp!
+dump_interval = dump_interval.to_i
 
 # Get ip addresses assoc with the node
 while nodes_to_addr_line = nodes_to_addr_file.gets
@@ -291,17 +313,40 @@ threads << Thread.new do
 	end
 end
 
-write_to_file = false
+stop_writing = false
 
 # Routing Thread
 threads << Thread.new do
 	while(1)
-		sleep(15)
-		if(write_to_file == false)
-			write_to_file = true
+		flag = false
+		sleep(5)
+		if(weight file changed)
+			flag = true
+		end
+		if(flag == true)
+			# update the node from the file 
+			node.adj_hash.each_key{ |neighbor|
+				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
+				serialized_obj = YAML::dump(out_packet)
+				sockfd = TCPSocket.open(neighbor, 9999)
+				sockfd.send(serialized_obj, 0)
+				sockfd.close
+			}
+		end
+		
+	end
+end
+
+# Dump Thread
+threads << Thread.new do
+	while(1)
+		sleep(dump_interval)
+		if(stop_writing == false)
+			stop_writing = true
 			str = ""
 			route = dijkstra(node.topo_hash, node.name)
-			f = File.open("routing_table#{node.name}.txt", "w")
+			path = routing_path_line + "/" + "routing_table_#{node.name}.txt"
+			f = File.open(path, "w")
 			str = ""
 			route.each_key{ |dest|
 				str += node.name + "," + dest + ","
@@ -313,18 +358,11 @@ threads << Thread.new do
 			f.close()
 		end
 	end
-	while(1)
-		sleep(5)
-		node.adj_hash.each_key{ |neighbor|
-			out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
-			serialized_obj = YAML::dump(out_packet)
-			sockfd = TCPSocket.open(neighbor, 9999)
-			sockfd.send(serialized_obj, 0)
-			sockfd.close
-		}
-	end
 end
 
+threads.each{ |t|
+	t.join
+}
 
 
 
