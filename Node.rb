@@ -364,6 +364,7 @@ end
 # Dump Thread
 threads << Thread.new do
 	while(1)
+		stop_writing = false
 		sleep(dump_interval)
 		if(stop_writing == false)
 			stop_writing = true
