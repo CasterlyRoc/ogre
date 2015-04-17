@@ -109,6 +109,7 @@ class Node
 		f = open(file)
 		while line = f.gets
 			source, dest, cost = line.split(",\n")
+			puts "#{source} #{dest} #{cost}"
 			if(@ip_addrs.include?(source) == true)
 				c = cost.to_i
 				if(@adj_hash.fetch(dest) != c)
@@ -330,7 +331,6 @@ threads << Thread.new do
 		if(node.file_has_changed(link_line))
 			flag = true
 		end
-		puts flag
 		if(flag == true || init == true)
 			init = false
 			if(flag == true && init == false)
@@ -340,10 +340,8 @@ threads << Thread.new do
 					if(node.ip_addrs.include?(source_node))
 						c = cost.to_i
 						node.add_neighbor(dest_node, c)
-						n = get_name(dest_node, node_line)	
-						@lock.synchronize{
-							node.add_topo(node.name,n, c)
-						}
+						n = get_name(dest_node, node_line)
+						node.add_topo(node.name,n, c)
 					end
 				end
 				link_file.close
@@ -351,7 +349,6 @@ threads << Thread.new do
 			node.adj_hash.each_key{ |neighbor|
 				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
 				out_packet.seq_num = out_packet.seq_num + 1
-				puts out_packet.seq_num
 				serialized_obj = YAML::dump(out_packet)
 				sockfd = TCPSocket.open(neighbor, 9999)
 				sockfd.send(serialized_obj, 0)
@@ -365,16 +362,9 @@ end
 # Dump Thread
 threads << Thread.new do
 	while(1)
-		stop_writing = false
 		sleep(dump_interval)
-		if(stop_writing == false)
-			stop_writing = true
 			str = ""
-			
-			@lock.synchronize{
-				route = dijkstra(node.topo_hash, node.name)
-			}
-			
+			route = dijkstra(node.topo_hash, node.name)
 			path = routing_path_line + "/" + "routing_table_#{node.name}.txt"
 			f = File.open(path, "w")
 			str = ""
@@ -386,10 +376,48 @@ threads << Thread.new do
 			}
 			f.write(str)
 			f.close()
-		end
+		
 	end
 end
 
 threads.each{ |t|
 	t.join
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
