@@ -20,7 +20,7 @@ class Packet
 
 	def initialize(type, source, dest, topo_hash, data)
 		@msg_type = type
-		@seq_num = 1
+		@seq_num = 0
 		@source = source
 		@dest = dest
 		@topo_hash = topo_hash
@@ -108,7 +108,7 @@ class Node
 		has_changed = false
 		f = open(file)
 		while line = f.gets
-			source, dest, cost = line.split(" \n")
+			source, dest, cost = line.split(",\n")
 			if(@ip_addrs.include?(source) == true)
 				c = cost.to_i
 				if(@adj_hash.fetch(dest) != c)
@@ -265,8 +265,8 @@ while nodes_to_addr_line = nodes_to_addr_file.gets
 end
 
 # Get links between nodes and the cost
-while link_line = link_file.gets
-	source_node, dest_node, cost = link_line.split(" ")
+while line = link_file.gets
+	source_node, dest_node, cost = line.split(",")
 	if(node.ip_addrs.include?(source_node))
 		c = cost.to_i
 		node.add_neighbor(dest_node, c)
@@ -277,7 +277,6 @@ end
 
 nodes_to_addr_file.close
 link_file.close
-
 
 # Recieving Thread
 threads << Thread.new do
@@ -328,16 +327,16 @@ threads << Thread.new do
 	while(1)
 		flag = false
 		sleep(5)
-		if(node.file_has_changed(link_file))
+		if(node.file_has_changed(link_line))
 			flag = true
-			puts "MADE IT"
 		end
+		puts flag
 		if(flag == true || init == true)
 			init = false
-			if(flag == true)
+			if(flag == true && init == false)
 				link_file = open(link_line)
 				while line = link_file.gets
-					source_node, dest_node, cost = line.split(" ")
+					source_node, dest_node, cost = line.split(",")
 					if(node.ip_addrs.include?(source_node))
 						c = cost.to_i
 						node.add_neighbor(dest_node, c)
@@ -349,6 +348,8 @@ threads << Thread.new do
 			end 
 			node.adj_hash.each_key{ |neighbor|
 				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
+				out_packet.seq_num = out_packet.seq_num + 1
+				puts out_packet.seq_num
 				serialized_obj = YAML::dump(out_packet)
 				sockfd = TCPSocket.open(neighbor, 9999)
 				sockfd.send(serialized_obj, 0)
