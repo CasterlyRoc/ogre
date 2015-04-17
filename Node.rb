@@ -341,8 +341,10 @@ threads << Thread.new do
 					if(node.ip_addrs.include?(source_node))
 						c = cost.to_i
 						node.add_neighbor(dest_node, c)
-						n = get_name(dest_node, node_line)
-						node.add_topo(node.name,n, c)
+						n = get_name(dest_node, node_line)	
+						@lock.synchronize{
+							node.add_topo(node.name,n, c)
+						}
 					end
 				end
 				link_file.close
@@ -366,7 +368,11 @@ threads << Thread.new do
 		if(stop_writing == false)
 			stop_writing = true
 			str = ""
-			route = dijkstra(node.topo_hash, node.name)
+			
+			@lock.synchronize{
+				route = dijkstra(node.topo_hash, node.name)
+			}
+			
 			path = routing_path_line + "/" + "routing_table_#{node.name}.txt"
 			f = File.open(path, "w")
 			str = ""
