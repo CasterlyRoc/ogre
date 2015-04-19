@@ -3,17 +3,6 @@ require 'thread'
 require 'yaml'
 require 'monitor'
 
-# Git commands to update project on Github
-# git stage (name of file you updated)
-# git commit -m 'What you changed'
-# git push origin master
-
-# gen weights file input
-# when to run dijkstras, wait for whole topo or whenever we recieve packet
-
-# Screen gra
-# Cant look up file
-
 class Packet
 
 	attr_accessor:msg_type,:seq_num,:source,:dest,:topo_hash,:data
@@ -25,10 +14,6 @@ class Packet
 		@dest = dest
 		@topo_hash = topo_hash
 		@data = data
-	end
-
-	def to_s
-		"#{msg_type}, #{seq_num}, #{source}, #{dest}, #{data}"
 	end
 
 end
@@ -87,7 +72,7 @@ def get_name(ip_addr, file)
 	end
 end
 
-
+#Shortest path algorithm
 def dijkstra (graph, src)
 	dist = {}
 	prev = {}
@@ -256,12 +241,16 @@ threads << Thread.new do
 	while(1)
 		flag = false
 		sleep(update_interval)
+
+		#Checks for topology change
 		if(node.file_has_changed(link_line))
 			flag = true
 		end
 	
-		if(init == true || flag == true) # || flag == true
+		if(init == true || flag == true)
 			init = false
+
+			#If topology changed found update topology hash
 			if(flag == true && init == false)
 				link_file = File.open(link_line)
 				while (line = link_file.gets)
@@ -275,6 +264,8 @@ threads << Thread.new do
 				end
 				link_file.close
 			end
+
+			#Sends Link State Packet to neighbors
 			node.adj_hash.each_key{ |neighbor|
 				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash[node.name],"THIS IS A TEST")
 				out_packet.seq_num = node.seq_hash[node.name] + 1
@@ -285,7 +276,8 @@ threads << Thread.new do
 			}
 			node.seq_hash[node.name] += 1
 
-			sleep(10)
+			#Update routing table
+			sleep(12)
 			route = dijkstra(node.topo_hash, node.name)
 			node.routing_table = route
 		end
@@ -316,4 +308,3 @@ end
 threads.each{ |t|
 	t.join
 }
-

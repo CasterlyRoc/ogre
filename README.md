@@ -1,4 +1,4 @@
-# ogre
+
 
 How to Run Our Code:
 
@@ -16,8 +16,8 @@ The config file is used as a command line argument. Our code is called using the
 
 Our code can also be run using the shell script file: test.sh
 
-The weights file must be structured: source,dest,weight
-The nodes-to-adresses should be structed: hostname	address (where the whitespace is a tab)
+The weights file must be structured: source,dest,weight ex. 10.0.0.20,10.0.0.21,4
+The nodes-to-adresses should be structed: hostname	address (where the whitespace is a tab) ex. n1	10.0.0.20
 
 What Our Code Does:
 
