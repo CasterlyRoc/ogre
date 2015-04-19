@@ -41,18 +41,10 @@ class Node
 		@name = name
 		@ip_addrs = Array.new
 		@adj_hash = Hash.new
-		@seq_hash = Hash.new
+		@seq_hash = {name => 0}
 		@routing_table = Hash.new
 		@topo_hash = Hash.new
 		@lock = Monitor.new
-	end
-
-	def add_ip_addr(ip)
-		ip_addrs.push(ip)
-	end
-
-	def add_neighbor(dest_node, cost)
-		adj_hash.store(dest_node, cost)
 	end
 
 	def add_topo(source, dest_node, cost)
@@ -73,46 +65,45 @@ class Node
 		}
 		puts "---Neighbors---"
 		adj_hash.each{ |k,v|
-			puts "  has an edge to #{k} with cost #{v}"
+			puts "#{name} has an edge to #{k} with cost #{v}"
 		}
 		puts "---Topo Hash---"
-		topo_string
+		t = topo_string(topo_hash)
+		puts "#{t}"
 	end
 
 	def topo_string(route)
-		puts "TOPO HASH STRING"
 		s = "{"
 		i = 0
 		route.each_key{ |k|
 			if (i != 0)
 				s += ","
 			end
-			s += "\"#{k}\"=>{"
+			s += "#{k}=>{"
 			j = 0
 			route[k].each{ |dest, cost|
 				if (j != 0)
 					s += ","
 				end
-				s += "\"#{dest}\"=>#{cost}"
-				j += 1
+				s += "#{dest}=>#{cost}"
+				j = 1
 			 }
 			 s+="}"
-			 i += 1
+			 i = 1
 		}
-
 		s  += "}"
-		puts s
+		return s
 	end
 
 	def file_has_changed(file)
 		has_changed = false
 		f = open(file)
 		while line = f.gets
-			source, dest, cost = line.split(",\n")
-			puts "#{source} #{dest} #{cost}"
-			if(@ip_addrs.include?(source) == true)
-				c = cost.to_i
-				if(@adj_hash.fetch(dest) != c)
+			s, d, c = line.split(",")
+			c = c.to_i
+			#puts "#{s} #{d} #{c}"
+			if(ip_addrs.include?(s) == true)
+				if(adj_hash[d] != c)
 					has_changed = true
 				end
 			end
@@ -193,18 +184,15 @@ def dijkstra (graph, src)
 		neighbor = false
 		if k == src then
 			route[k] = { k => dist[k]}
-		elsif prev[k] == src then
-			route[k] = { k => dist[k]}
 		else
 			while neighbor == false do
-				graph[src].each_key{ |neigh|
-					if prev[check] == neigh then
-						neighbor = true
-					end
-				}
+				if prev[check] == src then
+					neighbor = true
+					next_h = check
+				end
 				check = prev[check]
 			end
-			route[k]= {check => dist[k]}
+			route[k]= {next_h => dist[k]}
 		end
 	}
 
@@ -228,7 +216,6 @@ end
 
 # Variables
 threads = Array.new
-nodes = Array.new
 
 # Execute hostname to get name of the node
 name_of_node = `hostname`
@@ -239,6 +226,10 @@ node = Node.new(name_of_node)
 
 config_file = open(ARGV[0])
 
+max_size = config_file.gets
+max_size.chomp!
+max_size = max_size.to_i
+
 node_line = config_file.gets
 node_line.chomp!
 nodes_to_addr_file = open(node_line)
@@ -247,6 +238,10 @@ link_line = config_file.gets
 link_line.chomp!
 link_file = open(link_line)
 
+update_interval = config_file.gets
+update_interval.chomp!
+update_interval = update_interval.to_i
+
 routing_path_line = config_file.gets
 routing_path_line.chomp!
 
@@ -254,25 +249,24 @@ dump_interval = config_file.gets
 dump_interval.chomp!
 dump_interval = dump_interval.to_i
 
+config_file.close
+
 # Get ip addresses assoc with the node
-while nodes_to_addr_line = nodes_to_addr_file.gets
+while (nodes_to_addr_line = nodes_to_addr_file.gets)
 	name_of_node, ip_addr = nodes_to_addr_line.split(" ")
-	if(nodes.include?(name_of_node) == false)
-		nodes.push(name_of_node)
-	end
 	if(name_of_node == node.name)
-		node.add_ip_addr(ip_addr)
+		node.ip_addrs.push(ip_addr)
 	end
 end
 
 # Get links between nodes and the cost
-while line = link_file.gets
+while (line = link_file.gets)
 	source_node, dest_node, cost = line.split(",")
 	if(node.ip_addrs.include?(source_node))
-		c = cost.to_i
-		node.add_neighbor(dest_node, c)
+		cost = cost.to_i
+		node.adj_hash[dest_node] = cost
 		n = get_name(dest_node, node_line)
-		node.add_topo(node.name,n, c)
+		node.add_topo(node.name,n,cost)
 	end
 end
 
@@ -282,7 +276,7 @@ link_file.close
 # Recieving Thread
 threads << Thread.new do
 	srv_sock = TCPServer.open(9999)
-	recv_length = 255
+	recv_length = max_size
 	while(1)
 		data = ""
 		client = srv_sock.accept
@@ -293,17 +287,14 @@ threads << Thread.new do
 
 		packet = YAML::load(data)
 		if(packet.msg_type == "LINK_PACKET")
-			if(node.seq_hash[packet.source] != packet.seq_num)
+			if(node.seq_hash[packet.source] == nil || node.seq_hash[packet.source] < packet.seq_num)
 
+				puts "RECEIVED NEW PACKET"
 				# Updates the seq num for the source
 				node.seq_hash[packet.source] = packet.seq_num
 
 				# Updates nodes topo table with packets
-				packet.topo_hash.each_key{ |source|
-					packet.topo_hash[source].each{ |dest, cost|
-						node.add_topo(source,dest,cost)
-					}
-				}
+				node.topo_hash[packet.source] = packet.topo_hash
 
 				# Send recieved packet out to neighbors
 				recv_serialized_obj = YAML::dump(packet)
@@ -325,35 +316,39 @@ init = true
 
 # Routing Thread
 threads << Thread.new do
+	sleep(20)
 	while(1)
 		flag = false
-		sleep(5)
+		sleep(update_interval)
 		if(node.file_has_changed(link_line))
 			flag = true
 		end
-		if(flag == true || init == true)
+		puts flag
+		if(init == true || flag == true) # || flag == true
 			init = false
 			if(flag == true && init == false)
-				link_file = open(link_line)
-				while line = link_file.gets
+				link_file = File.open(link_line)
+				while (line = link_file.gets)
 					source_node, dest_node, cost = line.split(",")
 					if(node.ip_addrs.include?(source_node))
-						c = cost.to_i
-						node.add_neighbor(dest_node, c)
+						cost = cost.to_i
+						node.adj_hash[dest_node] = cost
 						n = get_name(dest_node, node_line)
-						node.add_topo(node.name,n, c)
+						node.add_topo(node.name,n,cost)
 					end
 				end
 				link_file.close
-			end 
+			end
 			node.adj_hash.each_key{ |neighbor|
-				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash,"THIS IS A TEST")
-				out_packet.seq_num = out_packet.seq_num + 1
+				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash[node.name],"THIS IS A TEST")
+				out_packet.seq_num = node.seq_hash[node.name] + 1
 				serialized_obj = YAML::dump(out_packet)
 				sockfd = TCPSocket.open(neighbor, 9999)
 				sockfd.send(serialized_obj, 0)
 				sockfd.close
 			}
+			node.seq_hash[node.name] += 1
+			puts "ROUTED PACKETS"
 		end
 		
 	end
@@ -361,63 +356,25 @@ end
 
 # Dump Thread
 threads << Thread.new do
+	sleep (update_interval+30)
 	while(1)
 		sleep(dump_interval)
-			str = ""
-			route = dijkstra(node.topo_hash, node.name)
-			path = routing_path_line + "/" + "routing_table_#{node.name}.txt"
-			f = File.open(path, "w")
-			str = ""
-			route.each_key{ |dest|
-				str += node.name + "," + dest + ","
-				route[dest].each{ |nextHop,cost|
-					str += cost.to_s + "," + nextHop + "\n"
-				}
+		route = dijkstra(node.topo_hash, node.name)
+		path = routing_path_line + "/routing_table_#{node.name}.txt"
+		str = ""
+		route.each_key{ |dest|
+			str = str + "#{node.name},#{dest},"
+			route[dest].each{ |nextHop,cost|
+				str = str + "#{cost},#{nextHop}\n"
 			}
-			f.write(str)
-			f.close()
-		
+		}
+		f = File.open(path, 'w')
+		f.write(str)
+		f.close()
 	end
 end
 
 threads.each{ |t|
 	t.join
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
