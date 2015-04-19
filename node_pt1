@@ -35,7 +35,7 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash,:lock,:routing_table
+	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash,:lock
 
 	def initialize(name)
 		@name = name
@@ -57,6 +57,44 @@ class Node
 		end
 	end
 
+	def to_s
+		puts "Node: #{name}"
+		puts "---IP Addresses---"
+		ip_addrs.each{ |s|
+			puts "  " + s
+		}
+		puts "---Neighbors---"
+		adj_hash.each{ |k,v|
+			puts "#{name} has an edge to #{k} with cost #{v}"
+		}
+		puts "---Topo Hash---"
+		t = topo_string(topo_hash)
+		puts "#{t}"
+	end
+
+	def topo_string(route)
+		s = "{"
+		i = 0
+		route.each_key{ |k|
+			if (i != 0)
+				s += ","
+			end
+			s += "#{k}=>{"
+			j = 0
+			route[k].each{ |dest, cost|
+				if (j != 0)
+					s += ","
+				end
+				s += "#{dest}=>#{cost}"
+				j = 1
+			 }
+			 s+="}"
+			 i = 1
+		}
+		s  += "}"
+		return s
+	end
+
 	def file_has_changed(file)
 		has_changed = false
 		f = open(file)
@@ -74,6 +112,31 @@ class Node
 		return has_changed
 	end
 end
+
+def print_route(route)
+		s = "{"
+		i = 0
+		route.each_key{ |k|
+			if (i != 0)
+				s += ","
+			end
+			s += "\"#{k}\"=>{"
+			j = 0
+			route[k].each{ |dest, cost|
+				if (j != 0)
+					s += ","
+				end
+				s += "\"#{dest}\"=>#{cost}"
+				j += 1
+			 }
+			 s+="}"
+			 i += 1
+		}
+
+		s  += "}"
+		return s
+end	
+
 
 # Gets the name of the node given an IP address
 def get_name(ip_addr, file)
@@ -226,6 +289,7 @@ threads << Thread.new do
 		if(packet.msg_type == "LINK_PACKET")
 			if(node.seq_hash[packet.source] == nil || node.seq_hash[packet.source] < packet.seq_num)
 
+				puts "RECEIVED NEW PACKET"
 				# Updates the seq num for the source
 				node.seq_hash[packet.source] = packet.seq_num
 
@@ -259,7 +323,7 @@ threads << Thread.new do
 		if(node.file_has_changed(link_line))
 			flag = true
 		end
-	
+		puts flag
 		if(init == true || flag == true) # || flag == true
 			init = false
 			if(flag == true && init == false)
@@ -284,10 +348,10 @@ threads << Thread.new do
 				sockfd.close
 			}
 			node.seq_hash[node.name] += 1
+			puts "ROUTED PACKETS"
 
-			sleep(10)
-			route = dijkstra(node.topo_hash, node.name)
-			node.routing_table = route
+			
+			
 		end
 		
 	end
@@ -298,7 +362,7 @@ threads << Thread.new do
 	sleep (update_interval+30)
 	while(1)
 		sleep(dump_interval)
-		route = node.routing_table
+		route = dijkstra(node.topo_hash, node.name)
 		path = routing_path_line + "/routing_table_#{node.name}.txt"
 		str = ""
 		route.each_key{ |dest|
