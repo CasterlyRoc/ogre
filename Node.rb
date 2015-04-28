@@ -5,6 +5,8 @@ require 'monitor'
 
 # Authors: Zack Knopp, Kevin Gutierrez, Mike Bellistri
 
+$frag_str = ""
+
 class Packet
 
 	attr_accessor:msg_type,:seq_num,:source,:dest,:topo_hash,:data
@@ -283,7 +285,29 @@ threads << Thread.new do
 				sock.close
 			else
 				source_ip = get_ip(packet.source, node_line)
-				puts "RECIEVED MSG #{source_ip} #{packet.data}"
+				$stderr.puts "RECIEVED MSG #{source_ip} #{packet.data}"
+			end
+		elsif(packet.msg_type == "FRAGMENT")
+			if(node.ip_addrs.include?(packet.dest) == false)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(node.circuit_table[packet.dest], 9999)
+				sock.send(obj, 0)
+				sock.close
+			else
+				$frag_str = $frag_str + packet.data
+			end
+		elsif(packet.msg_type == "FRAGMENT_END")
+			if(node.ip_addrs.include?(packet.dest) == false)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(node.circuit_table[packet.dest], 9999)
+				sock.send(obj, 0)
+				sock.close
+			else
+				$frag_str = $frag_str + packet.data
+				tmp = $frag_str
+				source_ip = get_ip(packet.source, node_line)
+				puts "RECIEVED MSG #{source_ip} #{tmp}"
+				$frag_str = ""
 			end
 		else
 			puts "RECIEVED A PACKET"
@@ -400,7 +424,7 @@ threads << Thread.new do
 					str = str + c
 				end
 				if(str.length == max_size)
-					send_packet = Packet.new(msg_type, node.name, destination, nil, str)
+					send_packet = Packet.new("FRAGMENT", node.name, destination, nil, str)
 					send_obj = YAML::dump(send_packet)
 					send_sockfd.send(send_obj, 0)
 					send_sockfd.close
@@ -408,6 +432,10 @@ threads << Thread.new do
 					str = ""
 				end
 			}
+			send_packet = Packet.new("FRAGMENT_END", node.name, destination, nil, str)
+			send_obj = YAML::dump(send_packet)
+			send_sockfd.send(send_obj, 0)
+			send_sockfd.close
 		end
 	end
 end
