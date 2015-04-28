@@ -400,45 +400,50 @@ threads << Thread.new do
 		tmp, msg_type, destination, message = send_line.split(/^([A-Z]+) ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \"([^"]*)\"/)
 		dest_node = get_name(destination, node_line)
 		next_hop = calc_next_hop(node, dest_node, node_line)
-		
-		# Set up circuit packet
-		out_packet = Packet.new("CIRCUIT", node.name, destination, nil, "")
-		serialized_obj = YAML::dump(out_packet)
-		send_sockfd = TCPSocket.open(next_hop, 9999)
 
-		# Opens first circuit path
-		node.add_route(destination, next_hop)
-		send_sockfd.send(serialized_obj, 0)
-		send_sockfd.close
-		
-		sleep(5)
-
-		send_sockfd = TCPSocket.open(next_hop, 9999)
-
-		if(message.length <= max_size)
-			send_packet = Packet.new(msg_type, node.name, destination, nil, message)
-			send_obj = YAML::dump(send_packet)
-			send_sockfd.send(send_obj, 0)
-			send_sockfd.close
+		if(node.topo_hash.has_key?(dest_node) == false)
+			$stderr.puts "SENDMSG ERROR: HOST UNREACHABLE"
 		else
-			str = ""
-			message.each_char{ |c|
-				if(str.length < max_size)
-					str = str + c
-				end
-				if(str.length == max_size)
-					send_packet = Packet.new("FRAGMENT", node.name, destination, nil, str)
-					send_obj = YAML::dump(send_packet)
-					send_sockfd.send(send_obj, 0)
-					send_sockfd.close
-					send_sockfd = TCPSocket.open(next_hop, 9999)
-					str = ""
-				end
-			}
-			send_packet = Packet.new("FRAGMENT_END", node.name, destination, nil, str)
-			send_obj = YAML::dump(send_packet)
-			send_sockfd.send(send_obj, 0)
+		
+			# Set up circuit packet
+			out_packet = Packet.new("CIRCUIT", node.name, destination, nil, "")
+			serialized_obj = YAML::dump(out_packet)
+			send_sockfd = TCPSocket.open(next_hop, 9999)
+
+			# Opens first circuit path
+			node.add_route(destination, next_hop)
+			send_sockfd.send(serialized_obj, 0)
 			send_sockfd.close
+			
+			sleep(5)
+
+			send_sockfd = TCPSocket.open(next_hop, 9999)
+
+			if(message.length <= max_size)
+				send_packet = Packet.new(msg_type, node.name, destination, nil, message)
+				send_obj = YAML::dump(send_packet)
+				send_sockfd.send(send_obj, 0)
+				send_sockfd.close
+			else
+				str = ""
+				message.each_char{ |c|
+					if(str.length < max_size)
+						str = str + c
+					end
+					if(str.length == max_size)
+						send_packet = Packet.new("FRAGMENT", node.name, destination, nil, str)
+						send_obj = YAML::dump(send_packet)
+						send_sockfd.send(send_obj, 0)
+						send_sockfd.close
+						send_sockfd = TCPSocket.open(next_hop, 9999)
+						str = ""
+					end
+				}
+				send_packet = Packet.new("FRAGMENT_END", node.name, destination, nil, str)
+				send_obj = YAML::dump(send_packet)
+				send_sockfd.send(send_obj, 0)
+				send_sockfd.close
+			end
 		end
 	end
 end
