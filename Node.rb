@@ -286,6 +286,7 @@ threads << Thread.new do
 			else
 				source_ip = get_ip(packet.source, node_line)
 				$stderr.puts "RECIEVED MSG #{source_ip} #{packet.data}"
+				$stdout.flush
 			end
 		elsif(packet.msg_type == "FRAGMENT")
 			if(node.ip_addrs.include?(packet.dest) == false)
@@ -306,7 +307,8 @@ threads << Thread.new do
 				$frag_str = $frag_str + packet.data
 				tmp = $frag_str
 				source_ip = get_ip(packet.source, node_line)
-				puts "RECIEVED MSG #{source_ip} #{tmp}"
+				$stderr.puts "RECIEVED MSG #{source_ip} #{tmp}"
+				$stdout.flush
 				$frag_str = ""
 			end
 		else
@@ -394,6 +396,7 @@ end
 threads << Thread.new do
 	while(1)
 		send_line = $stdin.gets.chomp
+		$stdout.flush
 		tmp, msg_type, destination, message = send_line.split(/^([A-Z]+) ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \"([^"]*)\"/)
 		dest_node = get_name(destination, node_line)
 		next_hop = calc_next_hop(node, dest_node, node_line)
