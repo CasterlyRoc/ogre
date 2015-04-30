@@ -5,7 +5,7 @@ require 'monitor'
 
 # Authors: Zack Knopp, Kevin Gutierrez, Mike Bellistri
 
-$frag_str = ""
+$key = 0
 
 class Packet
 
@@ -27,7 +27,7 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash,:lock,:routing_table,:circuit_table
+	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash,:lock,:routing_table,:circuit_table,:frag_str, :time, :count, :key_hash
 
 	def initialize(name)
 		@name = name
@@ -38,6 +38,9 @@ class Node
 		@routing_table = Hash.new
 		@topo_hash = Hash.new
 		@lock = Monitor.new
+		@frag_str = ""
+		@time = Time.now
+		@count = 0
 	end
 
 	def add_topo(source, dest_node, cost)
@@ -95,6 +98,29 @@ def get_ip(name, file)
 			return ip_addr
 		end
 	end
+end
+
+def get_link(name, node, file)
+	f = open(file)
+	while line = f.gets
+		name_of_node, ip_addr = line.split(" ")
+		ip_addr.chomp!
+		if(name == name_of_node)
+			node.adj_hash.each_key{|k|
+				if k == ip_addr
+					return ip_addr
+				end
+			}
+		end
+	end
+end
+
+def gen_key()
+	key = 0
+	while(key == 0)
+		key = rand(9)
+	end
+	return key
 end
 
 #Shortest path algorithm
@@ -167,9 +193,9 @@ def calc_next_hop(node, dest_node, node_line)
 	if(dest_node == dest)
 		next_hop = route[dest].keys.to_s
 		tmp = next_hop
-		end
+	end
 	}
-	next_hop = get_ip(tmp, node_line)
+	next_hop = get_link(tmp,node,node_line)
 	return next_hop
 end
 
@@ -236,7 +262,7 @@ link_file.close
 # Recieving Thread
 threads << Thread.new do
 	srv_sock = TCPServer.open(9999)
-	recv_length = max_size
+	recv_length = 255
 	while(1)
 		data = ""
 		client = srv_sock.accept
@@ -269,6 +295,15 @@ threads << Thread.new do
 			end
 		elsif(packet.msg_type == "CIRCUIT")
 			if(node.ip_addrs.include?(packet.dest) == false)
+				$key = gen_key
+				key_packet = Packet.new("KEY", node.name, packet.source, nil, $key)
+				serialized_obj = YAML::dump(key_packet)
+				next_hop = calc_next_hop(node, packet.source, node_line)
+				s = TCPSocket.open(next_hop, 9999)
+				s.send(serialized_obj, 0)
+				s.close
+
+
 				dest_name = get_name(packet.dest, node_line)
 				next_hop = calc_next_hop(node, dest_name, node_line)
 				obj = YAML::dump(packet)
@@ -276,6 +311,17 @@ threads << Thread.new do
 				node.add_route(packet.dest, next_hop)
 				sock.send(obj, 0)
 				sock.close
+			end
+		elsif(packet.msg_type == "KEY")
+			puts "RECIEVED KEY PACKET"
+			if(node.ip_addrs.include?(packet.dest) == false)
+				next_hop = calc_next_hop(node, packet.source, node_line)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(next_hop, 9999)
+				sock.send(obj, 0)
+				sock.close
+			else
+				node.add_key(packet.source, packet.data)
 			end
 		elsif(packet.msg_type == "SENDMSG")
 			if(node.ip_addrs.include?(packet.dest) == false)
@@ -286,7 +332,15 @@ threads << Thread.new do
 			else
 				source_ip = get_ip(packet.source, node_line)
 				$stderr.puts "RECIEVED MSG #{source_ip} #{packet.data}"
-				$stdout.flush
+			end
+		elsif(packet.msg_type == "FRAGMENT_START")
+			if(node.ip_addrs.include?(packet.dest) == false)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(node.circuit_table[packet.dest], 9999)
+				sock.send(obj, 0)
+				sock.close
+			else
+				node.frag_str = ""
 			end
 		elsif(packet.msg_type == "FRAGMENT")
 			if(node.ip_addrs.include?(packet.dest) == false)
@@ -295,7 +349,7 @@ threads << Thread.new do
 				sock.send(obj, 0)
 				sock.close
 			else
-				$frag_str = $frag_str + packet.data
+				node.frag_str = node.frag_str + packet.data
 			end
 		elsif(packet.msg_type == "FRAGMENT_END")
 			if(node.ip_addrs.include?(packet.dest) == false)
@@ -304,17 +358,71 @@ threads << Thread.new do
 				sock.send(obj, 0)
 				sock.close
 			else
-				$frag_str = $frag_str + packet.data
-				tmp = $frag_str
+				node.frag_str = node.frag_str + packet.data
+				tmp = node.frag_str
 				source_ip = get_ip(packet.source, node_line)
-				$stderr.puts "RECIEVED MSG #{source_ip} #{tmp}"
-				$stdout.flush
+				puts "RECIEVED MSG #{source_ip} #{tmp}"
 				$frag_str = ""
+			end
+		elsif (packet.msg_type == "PING")
+			if (node.ip_addrs.include?(packet.dest) == false)
+				dest_node = get_name(packet.dest, node_line)
+				next_hop = calc_next_hop(node, dest_node, node_line)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(next_hop, 9999)
+				sock.send(obj, 0)
+				sock.close
+			else
+				next_hop = calc_next_hop(node, packet.source, node_line)
+				out_packet = Packet.new("PING_ACK", packet.dest, packet.source, nil, "")
+				serialized_obj = YAML::dump(out_packet)
+				send_sockfd = TCPSocket.open(next_hop, 9999)
+				send_sockfd.send(serialized_obj, 0)
+				send_sockfd.close
+			end
+		elsif (packet.msg_type == "PING_ACK")
+			if (node.ip_addrs.include?( get_ip(packet.dest, node_line) ) == false)
+				next_hop = calc_next_hop(node, packet.dest, node_line)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(next_hop, 9999)
+				sock.send(obj, 0)
+				sock.close
+			else
+				time = Time.now - node.time
+				puts "PING recieved from #{packet.source} in #{time} seconds"
+
+			end
+		elsif (packet.msg_type == "TRACEROUTE")
+			if (node.ip_addrs.include?(packet.dest) == false)
+				dest_node = get_name(packet.dest, node_line)
+				next_hop = calc_next_hop(node, dest_node, node_line)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(next_hop, 9999)
+				sock.send(obj, 0)
+				sock.close
+				next_hop = calc_next_hop(node, packet.source, node_line)
+				out_packet = Packet.new("TRACEROUTE_ACK", node.name, packet.source, nil, "")
+				serialized_obj = YAML::dump(out_packet)
+				send_sockfd = TCPSocket.open(next_hop, 9999)
+				send_sockfd.send(serialized_obj, 0)
+				send_sockfd.close
+			end
+		elsif (packet.msg_type == "TRACEROUTE_ACK")
+			if (node.ip_addrs.include?( get_ip(packet.dest, node_line) ) == false)
+				next_hop = calc_next_hop(node, packet.dest, node_line)
+				obj = YAML::dump(packet)
+				sock = TCPSocket.open(next_hop, 9999)
+				sock.send(obj, 0)
+				sock.close
+			else
+				node.count += 1
+				ip_a = get_ip(packet.source,node_line) 
+				puts " #{node.count}   #{packet.source}(#{ip_a})"
+
 			end
 		else
 			puts "RECIEVED A PACKET"
-		end
-			
+		end	
 	end
 end
 
@@ -365,6 +473,7 @@ threads << Thread.new do
 
 			#Update routing table
 			sleep(10)
+			puts "EXECUTE"
 			route = dijkstra(node.topo_hash, node.name)
 			node.routing_table = route
 		end
@@ -395,16 +504,50 @@ end
 # Sending Thread
 threads << Thread.new do
 	while(1)
-		send_line = $stdin.gets.chomp
-		$stdout.flush
-		tmp, msg_type, destination, message = send_line.split(/^([A-Z]+) ([0-9]+.[0-9]+.[0-9]+.[0-9]+) \"([^"]*)\"/)
-		dest_node = get_name(destination, node_line)
-		next_hop = calc_next_hop(node, dest_node, node_line)
 
-		if(node.topo_hash.has_key?(dest_node) == false)
-			$stderr.puts "SENDMSG ERROR: HOST UNREACHABLE"
-		else
-		
+		send_line = $stdin.gets.chomp
+
+		if (send_line =~ /(PING) ([0-9]+.[0-9]+.[0-9]+.[0-9]+) ([0-9]+) ([0-9]+)/) then
+			msg_type = $1
+			destination = $2
+			numpings = $3.to_i
+			delay = $4.to_i
+			
+			count = 0
+
+			while (count < numpings)
+				dest_node = get_name(destination, node_line)
+				next_hop = calc_next_hop(node, dest_node, node_line)
+				out_packet = Packet.new("PING", node.name, destination, nil, "")
+				serialized_obj = YAML::dump(out_packet)
+				send_sockfd = TCPSocket.open(next_hop, 9999)
+				send_sockfd.send(serialized_obj, 0)
+				send_sockfd.close
+				node.time = Time.now
+				sleep(delay)
+				count += 1
+			end
+
+		elsif (send_line =~ /(TRACEROUTE) ([0-9]+.[0-9]+.[0-9]+.[0-9]+)/)
+			msg_type = $1
+			destination = $2
+			dest_node = get_name(destination, node_line)
+			next_hop = calc_next_hop(node, dest_node, node_line)
+			node.count = 0
+			puts "traceroute to #{destination}"
+			out_packet = Packet.new("TRACEROUTE", node.name, destination, nil, "")
+			serialized_obj = YAML::dump(out_packet)
+			send_sockfd = TCPSocket.open(next_hop, 9999)
+			send_sockfd.send(serialized_obj, 0)
+			send_sockfd.close
+
+		elsif send_line =~ /(SENDMSG) ([0-9]+.[0-9]+.[0-9]+.[0-9]+) (.+)/
+			msg_type = $1
+			destination = $2
+			message = $3
+			dest_node = get_name(destination, node_line)
+			next_hop = calc_next_hop(node, dest_node, node_line)
+			
 			# Set up circuit packet
 			out_packet = Packet.new("CIRCUIT", node.name, destination, nil, "")
 			serialized_obj = YAML::dump(out_packet)
@@ -417,6 +560,13 @@ threads << Thread.new do
 			
 			sleep(5)
 
+			puts node.key_hash
+
+			send_sockfd = TCPSocket.open(next_hop, 9999)
+			send_packet = Packet.new("FRAGMENT_START", node.name, destination, nil, nil)
+			send_obj = YAML::dump(send_packet)
+			send_sockfd.send(send_obj, 0)
+			send_sockfd.close
 			send_sockfd = TCPSocket.open(next_hop, 9999)
 
 			if(message.length <= max_size)
@@ -451,12 +601,3 @@ end
 threads.each{ |t|
 	t.join
 }
-
-
-
-
-
-
-
-
-
