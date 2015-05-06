@@ -10,6 +10,10 @@ class Wrapper
 	def initialize()
 		
 	end
+
+	def to_s
+		puts "WRAPPER #{node}"
+	end
 end
 
 class Packet
@@ -111,17 +115,20 @@ end
 
 def get_link(name, node, file)
 	f = open(file)
+	test = ""
 	while line = f.gets
 		name_of_node, ip_addr = line.split(" ")
 		ip_addr.chomp!
 		if(name == name_of_node)
 			node.adj_hash.each_key{|k|
 				if k == ip_addr
-					return ip_addr
+					test = ip_addr
 				end
 			}
 		end
 	end
+	f.close
+	return test
 end
 
 def gen_key()
@@ -238,24 +245,23 @@ def get_key(node)
 end
 
 def wrap(path, send_packet)
-
 	wrapper = Wrapper.new
 	send_obj = YAML::dump(send_packet)
 
 	key = get_key(path[0])
-	wrapper.cipher = encode(key, send_obj)
+	wrapper.cipher = encrypt(key, send_obj)
 	wrapper.node = path[0]
 
-	path.pop
+	path.shift
 
-	path.each{ |node|
+	path.each{ |n|
 		tmp = wrapper
 		wrapper = Wrapper.new
-		key = get_key(node)
-		wrapper.cipher = encode(key, tmp)
-		wrapper.node = node
+		key = get_key(n)
+		tmp = YAML::dump(tmp)
+		wrapper.cipher = encrypt(key, tmp)
+		wrapper.node = n
 	}
-
 	return wrapper
 end
 
@@ -331,7 +337,6 @@ threads << Thread.new do
 		end
 
 		packet = YAML::load(data)
-
 		if(packet.class == Packet)
 			if(packet.msg_type == "LINK_PACKET")
 				if(node.seq_hash[packet.source] == nil || node.seq_hash[packet.source] < packet.seq_num)
@@ -483,6 +488,7 @@ threads << Thread.new do
 		else
 			key = get_key(packet.node)
 			tmp = decrypt(key, packet.cipher)
+			tmp = YAML::load(tmp)
 			if(tmp.class == Wrapper)
 				next_hop = calc_next_hop(node, tmp.node, node_line)
 				sock = TCPSocket.open(next_hop, 9999)
@@ -658,22 +664,7 @@ threads << Thread.new do
 			if(message.length <= max_size)
 				send_packet = Packet.new(msg_type, node.name, destination, nil, message)
 				send_sockfd = TCPSocket.open(next_hop, 9999)
-				wrapper = Wrapper.new
-				send_obj = YAML::dump(send_packet)
-
-				key = get_key(path[0])
-				wrapper.cipher = encrypt(key, send_obj)
-				wrapper.node = path[0]
-
-				path.pop
-
-				path.each{ |node|
-					tmp = wrapper
-					wrapper = Wrapper.new
-					key = get_key(node)
-					wrapper.cipher = encrypt(key, tmp)
-					wrapper.node = node
-				}
+				wrapper = wrap(tmp, send_packet)
 				serialized_wrapper = YAML::dump(wrapper)
 				send_sockfd.send(serialized_wrapper, 0)
 				send_sockfd.close
