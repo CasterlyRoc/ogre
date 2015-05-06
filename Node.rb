@@ -244,17 +244,18 @@ def get_key(node)
 	end
 end
 
-def wrap(path, send_packet)
+def wrap(path_to_take, send_packet)
+
 	wrapper = Wrapper.new
 	send_obj = YAML::dump(send_packet)
 
-	key = get_key(path[0])
+	key = get_key(path_to_take[0])
 	wrapper.cipher = encrypt(key, send_obj)
-	wrapper.node = path[0]
+	wrapper.node = path_to_take[0]
 
-	path.shift
+	path_to_take.shift
 
-	path.each{ |n|
+	path_to_take.each{ |n|
 		tmp = wrapper
 		wrapper = Wrapper.new
 		key = get_key(n)
@@ -263,6 +264,14 @@ def wrap(path, send_packet)
 		wrapper.node = n
 	}
 	return wrapper
+end
+
+def copy(old_arr)
+	new_arr = Array.new
+	old_arr.each{ |e|
+		new_arr.push(e)
+	}
+	return new_arr
 end
 
 # Variables
@@ -550,7 +559,7 @@ threads << Thread.new do
 
 			#Sends Link State Packet to neighbors
 			node.adj_hash.each_key{ |neighbor|
-				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash[node.name],"THIS IS A TEST")
+				out_packet = Packet.new("LINK_PACKET", node.name, neighbor, node.topo_hash[node.name],"")
 				out_packet.seq_num = node.seq_hash[node.name] + 1
 				serialized_obj = YAML::dump(out_packet)
 				sockfd = TCPSocket.open(neighbor, 9999)
@@ -561,7 +570,7 @@ threads << Thread.new do
 			node.seq_hash[node.name] += 1
 
 			#Update routing table
-			sleep(10)
+			sleep(7)
 			puts "EXECUTE"
 			route = dijkstra(node.topo_hash, node.name)
 			node.routing_table = route
@@ -659,11 +668,10 @@ threads << Thread.new do
 				path.push(key)
 			} 			
 
-			tmp = path
-
 			if(message.length <= max_size)
 				send_packet = Packet.new(msg_type, node.name, destination, nil, message)
 				send_sockfd = TCPSocket.open(next_hop, 9999)
+				tmp = copy(path)
 				wrapper = wrap(tmp, send_packet)
 				serialized_wrapper = YAML::dump(wrapper)
 				send_sockfd.send(serialized_wrapper, 0)
@@ -672,7 +680,7 @@ threads << Thread.new do
 				str = ""
 				send_sockfd = TCPSocket.open(next_hop, 9999)
 				send_packet = Packet.new("FRAGMENT_START", node.name, destination, nil, nil)
-				tmp = path
+				tmp = copy(path)
 				wrapper = wrap(tmp, send_packet)
 				send_obj = YAML::dump(wrapper)
 				send_sockfd.send(send_obj, 0)
@@ -684,7 +692,7 @@ threads << Thread.new do
 					end
 					if(str.length == max_size)
 						send_packet = Packet.new("FRAGMENT", node.name, destination, nil, str)
-						tmp = path
+						tmp = copy(path)
 						wrapper = wrap(tmp, send_packet)
 						send_obj = YAML::dump(wrapper)
 						send_sockfd.send(send_obj, 0)
@@ -694,7 +702,7 @@ threads << Thread.new do
 					end
 				}
 				send_packet = Packet.new("FRAGMENT_END", node.name, destination, nil, str)
-				tmp = path
+				tmp = copy(path)
 				wrapper = wrap(tmp, send_packet)
 				send_obj = YAML::dump(wrapper)
 				send_sockfd.send(send_obj, 0)
