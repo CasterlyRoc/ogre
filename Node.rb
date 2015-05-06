@@ -5,13 +5,10 @@ require 'monitor'
 
 # Authors: Zack Knopp, Kevin Gutierrez, Mike Bellistri
 
-$key = 0
-
 class Wrapper
 	attr_accessor:cipher,:node
-	def initialize(cipher, node)
-		@cipher = cipher
-		@node = node
+	def initialize()
+		
 	end
 end
 
@@ -35,7 +32,7 @@ end
 
 class Node
 
-	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash,:lock,:routing_table,:circuit_table,:frag_str, :time, :count, :key_hash
+	attr_accessor:name,:ip_addrs,:adj_hash,:seq_hash,:topo_hash,:lock,:routing_table,:circuit_table,:frag_str, :time, :count, :key_hash, :key
 
 	def initialize(name)
 		@name = name
@@ -226,13 +223,40 @@ def decrypt(key, message)
 		b = c + key
 		decrypt = decrypt + b.chr
 	}
+	return decrypt
 end
 
-def wrap(message, node)
-	node.key_hash.each_value{ |key|
-		message = encrypt(message, key)
+def get_key(node)
+	key_file = open("keys.txt")
+	while line = key_file.gets
+		test_node, key = line.split(" ")
+		if(node == test_node)
+			key.chomp!
+			return key.to_i
+		end
+	end
+end
+
+def wrap(path, send_packet)
+
+	wrapper = Wrapper.new
+	send_obj = YAML::dump(send_packet)
+
+	key = get_key(path[0])
+	wrapper.cipher = encode(key, send_obj)
+	wrapper.node = path[0]
+
+	path.pop
+
+	path.each{ |node|
+		tmp = wrapper
+		wrapper = Wrapper.new
+		key = get_key(node)
+		wrapper.cipher = encode(key, tmp)
+		wrapper.node = node
 	}
-	return message
+
+	return wrapper
 end
 
 # Variables
@@ -308,7 +332,7 @@ threads << Thread.new do
 
 		packet = YAML::load(data)
 
-		if(packet.class == "Packet")
+		if(packet.class == Packet)
 			if(packet.msg_type == "LINK_PACKET")
 				if(node.seq_hash[packet.source] == nil || node.seq_hash[packet.source] < packet.seq_num)
 
@@ -331,9 +355,8 @@ threads << Thread.new do
 				end
 			elsif(packet.msg_type == "CIRCUIT")
 				if(node.ip_addrs.include?(packet.dest) == false)
-					$key = gen_key
 					next_hop = calc_next_hop(node, packet.source, node_line)
-					out_packet = Packet.new("KEY", node.name, packet.source, nil, $key)
+					out_packet = Packet.new("KEY", node.name, packet.source, nil, node.key)
 					serialized_obj = YAML::dump(out_packet)
 					send_sockfd = TCPSocket.open(next_hop, 9999)
 					send_sockfd.send(serialized_obj, 0)
@@ -350,7 +373,7 @@ threads << Thread.new do
 				end
 			elsif(packet.msg_type == "KEY")
 				if(node.ip_addrs.include?(get_ip(packet.dest, node_line)) == false)
-					next_hop = calc_next_hop(node, packet.source, node_line)
+					next_hop = calc_next_hop(node, packet.dest, node_line)
 					obj = YAML::dump(packet)
 					sock = TCPSocket.open(next_hop, 9999)
 					sock.send(obj, 0)
@@ -458,13 +481,36 @@ threads << Thread.new do
 				puts "RECIEVED A PACKET"
 			end
 		else
-			
+			key = get_key(packet.node)
+			tmp = decrypt(key, packet.cipher)
+			if(tmp.class == Wrapper)
+				next_hop = calc_next_hop(node, tmp.node, node_line)
+				sock = TCPSocket.open(next_hop, 9999)
+				obj = YAML::dump(tmp)
+				sock.send(obj, 0)
+				sock.close
+			else
+				obj = YAML::dump(tmp)
+				sock = TCPSocket.open(node.circuit_table[tmp.dest], 9999)
+				sock.send(obj, 0)
+				sock.close
+			end
 		end	
 	end
 end
 
 stop_writing = false
 init = true
+
+# $file_lock = Monitor.new
+
+# $file_lock.synchronize{
+# 	node.key = gen_key
+# 	key_file = File.open("keys.txt",'a')
+# 	str = node.name + "\t" + node.key.to_s + "\n"
+# 	key_file.write(str)
+# 	key_file.close
+# }
 
 # Routing Thread
 threads << Thread.new do
@@ -582,6 +628,7 @@ threads << Thread.new do
 			msg_type = $1
 			destination = $2
 			message = $3
+			message.chomp!
 			dest_node = get_name(destination, node_line)
 			next_hop = calc_next_hop(node, dest_node, node_line)
 			
@@ -597,29 +644,58 @@ threads << Thread.new do
 			
 			sleep(5)
 
+			# Create wrapper
 			
+			path = Array.new
 
-			send_sockfd = TCPSocket.open(next_hop, 9999)
-			send_packet = Packet.new("FRAGMENT_START", node.name, destination, nil, nil)
-			send_obj = YAML::dump(send_packet)
-			send_sockfd.send(send_obj, 0)
-			send_sockfd.close
-			send_sockfd = TCPSocket.open(next_hop, 9999)
+			# Add path to wrapper
+			node.key_hash.each_key{ |key|
+				path.push(key)
+			} 			
+
+			tmp = path
 
 			if(message.length <= max_size)
 				send_packet = Packet.new(msg_type, node.name, destination, nil, message)
+				send_sockfd = TCPSocket.open(next_hop, 9999)
+				wrapper = Wrapper.new
 				send_obj = YAML::dump(send_packet)
-				send_sockfd.send(send_obj, 0)
+
+				key = get_key(path[0])
+				wrapper.cipher = encrypt(key, send_obj)
+				wrapper.node = path[0]
+
+				path.pop
+
+				path.each{ |node|
+					tmp = wrapper
+					wrapper = Wrapper.new
+					key = get_key(node)
+					wrapper.cipher = encrypt(key, tmp)
+					wrapper.node = node
+				}
+				serialized_wrapper = YAML::dump(wrapper)
+				send_sockfd.send(serialized_wrapper, 0)
 				send_sockfd.close
 			else
 				str = ""
+				send_sockfd = TCPSocket.open(next_hop, 9999)
+				send_packet = Packet.new("FRAGMENT_START", node.name, destination, nil, nil)
+				tmp = path
+				wrapper = wrap(tmp, send_packet)
+				send_obj = YAML::dump(wrapper)
+				send_sockfd.send(send_obj, 0)
+				send_sockfd.close
+				send_sockfd = TCPSocket.open(next_hop, 9999)
 				message.each_char{ |c|
 					if(str.length < max_size)
 						str = str + c
 					end
 					if(str.length == max_size)
 						send_packet = Packet.new("FRAGMENT", node.name, destination, nil, str)
-						send_obj = YAML::dump(send_packet)
+						tmp = path
+						wrapper = wrap(tmp, send_packet)
+						send_obj = YAML::dump(wrapper)
 						send_sockfd.send(send_obj, 0)
 						send_sockfd.close
 						send_sockfd = TCPSocket.open(next_hop, 9999)
@@ -627,7 +703,9 @@ threads << Thread.new do
 					end
 				}
 				send_packet = Packet.new("FRAGMENT_END", node.name, destination, nil, str)
-				send_obj = YAML::dump(send_packet)
+				tmp = path
+				wrapper = wrap(tmp, send_packet)
+				send_obj = YAML::dump(wrapper)
 				send_sockfd.send(send_obj, 0)
 				send_sockfd.close
 			end
