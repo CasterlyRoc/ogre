@@ -11,7 +11,11 @@ Our code is run using the config file: project.config This file has 6 parameters
 
 The config file is used as a command line argument. Our code is called using the ruby call: ruby Node.rb project.config
 
+When running our code make sure the keys.txt file is completely empty every time you run it
+
 Our code can also be run using the shell script file: test.sh
+
+Once the message "YOU CAN NOW EXECUTE COMMANDS" appears you can enter commands into each terminal
 
 The weights file must be structured: source,dest,weight ex. 10.0.0.20,10.0.0.21,4 The nodes-to-adresses should be structed: hostname address (where the whitespace is a tab) ex. n1 10.0.0.20
 
@@ -45,3 +49,9 @@ A node uses the topo_hash from Part 1 to building the circuit table
 Ping sends NUMPING packets to packet to DST with DELAY seconds and wait for an acknowledgement and displays the RTT
 
 Traceroute sends packets to DST and intermediate nodes send a acknowledgement back for output.
+
+We used onion routing as our security extension. When a message is about to be sent a circuit is created to the destination. As the circuit is created packets are sent back to the source so the source knows the full path. The source has to know the full path in order to encrypt the message.
+
+The message is then put into a packet and the entire packet is encrypted using Caesar Cipher and the key for the last node in the chain. Once this is done the cipher is put into a wrapper class consisting of a cipher and a node field. Each wrapper is then encrypted using the next node in the chain and put within another wrapper class. This makes the onion and once it has been created it is sent out.
+
+Once a node recieves data it determines if it is a wrapper or a packet. If it is a wrapper it will decrypt the wrapper's cipher using its own key. The resulting data structure is then sent to the next node along the chain. 
