@@ -134,7 +134,7 @@ end
 def gen_key()
 	key = 0
 	while(key == 0)
-		key = rand(9)
+		key = rand(127)
 	end
 	return key
 end
@@ -219,6 +219,9 @@ def encrypt(key, message)
 	encrypt = ""
 	message.each_byte{ |c|
 		a = c - key
+		if a < 0
+			a = a + 128
+		end
 		encrypt = encrypt + a.chr
 	}
 	return encrypt
@@ -228,6 +231,9 @@ def decrypt(key, message)
 	decrypt = ""
 	message.each_byte{ |c|
 		b = c + key
+		if b >= 128
+			b = b - 128
+		end
 		decrypt = decrypt + b.chr
 	}
 	return decrypt
@@ -517,15 +523,15 @@ end
 stop_writing = false
 init = true
 
-# $file_lock = Monitor.new
+$file_lock = Monitor.new
 
-# $file_lock.synchronize{
-# 	node.key = gen_key
-# 	key_file = File.open("keys.txt",'a')
-# 	str = node.name + "\t" + node.key.to_s + "\n"
-# 	key_file.write(str)
-# 	key_file.close
-# }
+$file_lock.synchronize{
+	node.key = gen_key
+	key_file = File.open("keys.txt",'a')
+	str = node.name + "\t" + node.key.to_s + "\n"
+	key_file.write(str)
+	key_file.close
+}
 
 # Routing Thread
 threads << Thread.new do
@@ -570,8 +576,8 @@ threads << Thread.new do
 			node.seq_hash[node.name] += 1
 
 			#Update routing table
-			sleep(7)
-			puts "EXECUTE"
+			sleep(20)
+			puts "YOU CAN NOW EXECUTE COMMANDS"
 			route = dijkstra(node.topo_hash, node.name)
 			node.routing_table = route
 		end
