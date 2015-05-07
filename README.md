@@ -52,6 +52,8 @@ Traceroute sends packets to DST and intermediate nodes send a acknowledgement ba
 
 We used onion routing as our security extension. When a message is about to be sent a circuit is created to the destination. As the circuit is created packets are sent back to the source so the source knows the full path. The source has to know the full path in order to encrypt the message.
 
+We are protecting against active listening(man in the middle) and packet sniffing types of attacks. With onion routing a listener could know the keys of the each node in the system but without knowing the path they couldn't decrypt it because the packet is layered with encryption. The encryption on the packet is peeled away in a very specific order and without knowing the order you can't decrypt it.
+
 The message is then put into a packet and the entire packet is encrypted using Caesar Cipher and the key for the last node in the chain. Once this is done the cipher is put into a wrapper class consisting of a cipher and a node field. Each wrapper is then encrypted using the next node in the chain and put within another wrapper class. This makes the onion and once it has been created it is sent out.
 
 Once a node recieves data it determines if it is a wrapper or a packet. If it is a wrapper it will decrypt the wrapper's cipher using its own key. The resulting data structure is then sent to the next node along the chain. 
